@@ -4,7 +4,8 @@
   "description": "Monitors and indicates postMessage-listeners in the current window.",
   "version": "1.0.0",
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
   },
   "content_scripts": [
     {
