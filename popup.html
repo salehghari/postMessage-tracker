@@ -1,141 +1,92 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<meta charset="utf-8">
-	<style type="text/css">
-		:root {
-			--bg-color: #1e1e2e;
-			--text-color: #cdd6f4;
-			--card-bg: #181825;
-			--card-border: #313244;
-			--pre-bg: #11111b;
-			--header-color: #89b4fa;
-			--domain-color: #f9e2af;
-			--win-color: #a6adc8;
-			--stack-color: #9399b2;
-			--string-color: #a6e3a1;
-			--keyword-color: #cba6f7;
-			--accent-color: #89b4fa;
-			--input-bg: #11111b;
-		}
-
-		body.light-mode {
-			--bg-color: #f8f9fa;
-			--text-color: #212529;
-			--card-bg: #ffffff;
-			--card-border: #dee2e6;
-			--pre-bg: #f1f3f5;
-			--header-color: #0d6efd;
-			--domain-color: #6610f2;
-			--win-color: #6c757d;
-			--stack-color: #495057;
-			--string-color: #198754;
-			--keyword-color: #d63384;
-			--accent-color: #0d6efd;
-			--input-bg: #ffffff;
-		}
-
-		body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: var(--bg-color); color: var(--text-color); width: 450px; transition: background 0.2s, color 0.2s; }
-		#content { min-height: 420px; max-height: 600px; padding: 12px; overflow-y: auto; }
-		
-		.top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-		h3 { margin: 0; font-weight: 600; font-size: 13px; color: var(--header-color); word-break: break-all; }
-		
-		/* Navigation Tabs */
-		.tab-nav { display: flex; gap: 6px; margin-bottom: 10px; border-bottom: 1px solid var(--card-border); padding-bottom: 8px; }
-		.tab-btn { background: transparent; border: 1px solid var(--card-border); color: var(--text-color); padding: 5px 12px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; }
-		.tab-btn.active { background: var(--accent-color); color: #11111b; border-color: var(--accent-color); }
-
-		#theme-toggle { background: var(--card-border); color: var(--text-color); border: none; border-radius: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer; font-weight: bold; }
-
-		/* Search & Filter Bar UI */
-		.filter-container { margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
-		#search-input { width: 100%; box-sizing: border-box; background: var(--input-bg); border: 1px solid var(--card-border); color: var(--text-color); padding: 6px 10px; border-radius: 4px; font-size: 11px; font-family: inherit; }
-		.filter-pills { display: flex; gap: 4px; flex-wrap: wrap; }
-		.pill { background: var(--card-border); color: var(--text-color); border: none; padding: 3px 8px; border-radius: 12px; font-size: 10px; cursor: pointer; font-weight: bold; }
-		.pill.active { background: var(--accent-color); color: #11111b; }
-
-		ol { padding: 0; margin: 0; list-style: none; }
-		li { margin-bottom: 12px; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 6px; padding: 10px; }
-		
-		.header-line { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-		.domain { font-weight: bold; color: var(--domain-color); font-size: 13px; }
-		.win-info { font-family: monospace; font-size: 11px; color: var(--win-color); }
-		
-		.badges { margin: 6px 0; display: flex; flex-wrap: wrap; gap: 4px; }
-		.badge { font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 4px; display: inline-block; text-transform: uppercase; }
-		.badge-danger { background: #f38ba8; color: #11111b; }
-		.badge-warning { background: #fab387; color: #11111b; }
-		.badge-info { background: #89b4fa; color: #11111b; }
-
-		.action-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
-		.btn-copy { background: var(--card-border); color: var(--text-color); border: none; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer; }
-		.btn-copy:hover { background: var(--accent-color); color: #11111b; }
-
-		.stack-info { font-size: 10px; color: var(--stack-color); margin-bottom: 6px; font-family: monospace; }
-		
-		pre { white-space: pre-wrap; word-wrap: break-word; background: var(--pre-bg); color: var(--text-color); padding: 10px; border-radius: 4px; font-size: 11px; margin: 0; font-family: "Consolas", "Courier New", monospace; border: 1px solid var(--card-border); max-height: 180px; overflow-y: auto; line-height: 1.4; }
-		
-		.syn-keyword { color: var(--keyword-color); font-weight: bold; }
-		.syn-string { color: var(--string-color); }
-		
-		.hl-sink { background: rgba(243, 139, 168, 0.25); color: #f38ba8; border: 1px solid #f38ba8; font-weight: bold; padding: 0 3px; border-radius: 3px; }
-		.hl-weak { background: rgba(250, 179, 135, 0.25); color: #fab387; border: 1px solid #fab387; font-weight: bold; padding: 0 3px; border-radius: 3px; }
-
-		/* PoC Tab Form Controls */
-		.tab-view { display: none; }
-		.tab-view.active { display: block; }
-		
-		.poc-field { margin-bottom: 12px; }
-		.poc-field label { display: block; font-size: 11px; font-weight: bold; margin-bottom: 4px; color: var(--text-color); }
-		.poc-field input, .poc-field textarea { width: 100%; box-sizing: border-box; background: var(--input-bg); border: 1px solid var(--card-border); color: var(--text-color); padding: 8px; border-radius: 4px; font-family: "Consolas", monospace; font-size: 11px; }
-		.poc-field textarea { height: 140px; resize: vertical; }
-
-		.btn-primary { width: 100%; background: var(--accent-color); color: #11111b; border: none; padding: 8px; border-radius: 4px; font-weight: bold; font-size: 12px; cursor: pointer; }
-		.btn-primary:hover { opacity: 0.9; }
-		#poc-status { margin-top: 8px; font-size: 11px; text-align: center; font-weight: bold; min-height: 16px; }
-	</style>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-	<div id="content">
-		<div class="top-bar">
-			<h3 id="h">Targeting Page</h3>
-			<button id="theme-toggle" title="Toggle Theme">🌓 Theme</button>
-		</div>
+  <div class="top-bar">
+    <h3 id="target-url">postMessage Tracker</h3>
+    <div class="top-bar-actions">
+      <button id="btn-export" class="icon-btn" title="Export JSON">Export</button>
+      <button id="btn-clear" class="icon-btn" title="Clear data">Clear</button>
+      <button id="btn-theme" class="icon-btn" title="Toggle theme">Theme</button>
+    </div>
+  </div>
 
-		<div class="tab-nav">
-			<button id="nav-listeners" class="tab-btn active">Listeners</button>
-			<button id="nav-poc" class="tab-btn">⚡ PoC Tester</button>
-		</div>
+  <div class="tab-nav">
+    <button class="tab-btn active" data-tab="listeners">
+      Listeners <span id="count-listeners" class="count">0</span>
+    </button>
+    <button class="tab-btn" data-tab="messages">
+      Messages <span id="count-messages" class="count">0</span>
+    </button>
+    <button class="tab-btn" data-tab="senders">
+      Senders <span id="count-senders" class="count">0</span>
+    </button>
+    <button class="tab-btn" data-tab="poc">PoC</button>
+  </div>
 
-		<!-- Tab 1: Listeners View with Search & Filter Bar -->
-		<div id="view-listeners" class="tab-view active">
-			<div class="filter-container">
-				<input type="text" id="search-input" placeholder="🔍 Search domain, code or keywords..." />
-				<div class="filter-pills">
-					<button class="pill active" data-filter="all">All</button>
-					<button class="pill" data-filter="danger">Danger</button>
-					<button class="pill" data-filter="warning">Warning</button>
-					<button class="pill" data-filter="no-origin">No Origin Check</button>
-				</div>
-			</div>
-			<ol id="x"></ol>
-		</div>
+  <div id="stats-bar" class="stats-bar" style="display:none;"></div>
 
-		<!-- Tab 2: Real-time PoC Sender -->
-		<div id="view-poc" class="tab-view">
-			<div class="poc-field">
-				<label for="poc-origin">Target Origin (or wildcard '*')</label>
-				<input type="text" id="poc-origin" value="*" placeholder="*" />
-			</div>
-			<div class="poc-field">
-				<label for="poc-payload">Payload (JSON or Raw Text)</label>
-				<textarea id="poc-payload" placeholder='{"type": "user_data", "action": "ping"}'></textarea>
-			</div>
-			<button id="btn-send-poc" class="btn-primary">Fire postMessage Payload</button>
-			<div id="poc-status"></div>
-		</div>
-	</div>
-	<script src="popup.js"></script>
+  <!-- Listeners tab -->
+  <div id="tab-listeners" class="tab-view active">
+    <div class="filter-bar">
+      <input type="text" id="search-input" placeholder="Search domain, code, stack..." />
+      <div class="pill-group" title="Filter by pattern confidence (not confirmed severity)">
+        <button class="pill active" data-filter="all">All</button>
+        <button class="pill" data-filter="critical" title="Critical-risk pattern — needs validation">Crit</button>
+        <button class="pill" data-filter="high" title="High-risk pattern — needs validation">High</button>
+        <button class="pill" data-filter="medium" title="Medium-risk pattern — needs validation">Med</button>
+      </div>
+    </div>
+    <div class="tab-content" id="listeners-list"></div>
+  </div>
+
+  <!-- Messages tab -->
+  <div id="tab-messages" class="tab-view">
+    <div class="filter-bar">
+      <input type="text" id="msg-search-input" placeholder="Search origin, data..." />
+    </div>
+    <div class="tab-content" id="messages-list"></div>
+  </div>
+
+  <!-- Senders tab -->
+  <div id="tab-senders" class="tab-view">
+    <div class="filter-bar">
+      <input type="text" id="sender-search-input" placeholder="Search target origin, data..." />
+    </div>
+    <div class="tab-content" id="senders-list"></div>
+  </div>
+
+  <!-- PoC Tester tab -->
+  <div id="tab-poc" class="tab-view">
+    <div class="tab-content">
+      <div class="poc-form">
+        <div class="poc-field">
+          <label for="poc-origin">Target Origin</label>
+          <input type="text" id="poc-origin" value="*" placeholder="* or https://target.com" />
+        </div>
+        <div class="poc-field">
+          <label for="poc-payload">Payload (JSON or text)</label>
+          <textarea id="poc-payload" placeholder='{"type": "test", "action": "ping"}'></textarea>
+        </div>
+        <button id="btn-send-poc" class="btn-primary">Send postMessage</button>
+        <div id="poc-status"></div>
+
+        <div style="margin-top: 16px; border-top: 1px solid var(--overlay); padding-top: 12px;">
+          <div class="poc-field">
+            <label>Quick Harness</label>
+            <button id="btn-harness" class="btn-primary" style="background: var(--overlay); color: var(--text);">
+              Copy Exploit Harness HTML
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="analyzer.js"></script>
+  <script src="popup.js"></script>
 </body>
 </html>

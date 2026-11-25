@@ -1,0 +1,138 @@
+{
+  "passed": 20,
+  "failed": 6,
+  "skipped": 0,
+  "total": 26,
+  "results": [
+    {
+      "name": "Extension service worker loaded",
+      "status": "PASS",
+      "detail": "admccjkmockfdflocgggjfgdacdodkdf"
+    },
+    {
+      "name": "Page loads",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "MAIN world script installed",
+      "status": "FAIL",
+      "detail": ""
+    },
+    {
+      "name": "addEventListener hooked",
+      "status": "FAIL",
+      "detail": ""
+    },
+    {
+      "name": "postMessage hooked",
+      "status": "FAIL",
+      "detail": ""
+    },
+    {
+      "name": "removeEventListener hooked (P5)",
+      "status": "FAIL",
+      "detail": ""
+    },
+    {
+      "name": "addEventListener registered",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Duplicate listener handled",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "{once: true} listener registered",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Capture-phase listener registered",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "AbortSignal listener registered",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "removeEventListener called",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "AbortController.abort() called",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Self postMessage (specific origin)",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Self postMessage (wildcard)",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Self postMessage (options object)",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Same-origin iframe messaging",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Cross-origin iframe messaging",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "MessagePort communication",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Burst 5 messages",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Direct innerHTML sink executed",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Popup interaction",
+      "status": "FAIL",
+      "detail": "net::ERR_FILE_NOT_FOUND at chrome-extension://admccjkmockfdflocgggjfgdacdodkdf/popup.html"
+    },
+    {
+      "name": "pushState navigation",
+      "status": "PASS",
+      "detail": "http://localhost:9100/page-two"
+    },
+    {
+      "name": "Message after pushState",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Post-navigation popup",
+      "status": "FAIL",
+      "detail": "net::ERR_FILE_NOT_FOUND at chrome-extension://admccjkmockfdflocgggjfgdacdodkdf/p"
+    },
+    {
+      "name": "Second tab loads cross-origin page",
+      "status": "PASS",
+      "detail": ""
+    }
+  ]
+}

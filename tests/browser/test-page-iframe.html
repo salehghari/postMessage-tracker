@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>PM-Tracker Test: Iframe</title>
+  <style>
+    body { font-family: monospace; background: #181825; color: #cdd6f4; padding: 10px; font-size: 12px; }
+    h3 { color: #f9e2af; font-size: 13px; }
+    .log { background: #11111b; padding: 8px; margin-top: 6px; max-height: 100px; overflow-y: auto; white-space: pre-wrap; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h3>Iframe (origin: <span id="my-origin"></span>)</h3>
+  <div id="log" class="log"></div>
+
+  <script>
+    document.getElementById('my-origin').textContent = location.origin;
+    var log = document.getElementById('log');
+
+    // Listener with origin check
+    window.addEventListener('message', function(event) {
+      log.textContent += 'Received: ' + JSON.stringify(event.data) + ' from ' + event.origin + '\n';
+
+      // Echo back
+      if (event.source) {
+        event.source.postMessage({
+          type: 'iframe-response',
+          echo: event.data,
+          iframeOrigin: location.origin
+        }, event.origin !== 'null' ? event.origin : '*');
+      }
+    });
+
+    // No-origin-check listener (intentionally vulnerable pattern)
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.action === 'write') {
+        document.body.insertAdjacentHTML('beforeend', '<div>' + e.data.content + '</div>');
+        log.textContent += '[NO-ORIGIN] insertAdjacentHTML from message data\n';
+      }
+    });
+
+    log.textContent += 'Iframe listeners ready\n';
+  </script>
+</body>
+</html>

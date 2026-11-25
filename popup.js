@@ -1,283 +1,650 @@
-var port = chrome.runtime.connect({
-	name: "Sample Communication"
-});
+/*
+ * popup.js — postMessage Tracker popup UI
+ * Renders listeners, messages, senders with security analysis.
+ */
+(function() {
+  'use strict';
 
-var currentTargetUrl = "";
-var globalListenersData = [];
-var currentFilterType = 'all';
-var currentSearchQuery = '';
+  // ── State ─────────────────────────────────────────────────────────
+  var port = null;
+  var currentTabId = -1;
+  var currentTabUrl = '';
+  var tabListeners = [];
+  var tabMessages = [];
+  var tabSenders = [];
+  var activeTab = 'listeners';
+  var searchQuery = '';
+  var confidenceFilter = 'all';
 
-function initTheme() {
-	chrome.storage.sync.get({ theme: 'dark' }, function(items) {
-		if (items.theme === 'light') {
-			document.body.classList.add('light-mode');
-		} else {
-			document.body.classList.remove('light-mode');
-		}
-	});
-}
+  // ── Init ──────────────────────────────────────────────────────────
 
-function setupThemeToggle() {
-	var toggleBtn = document.getElementById('theme-toggle');
-	if (toggleBtn) {
-		toggleBtn.addEventListener('click', function() {
-			document.body.classList.toggle('light-mode');
-			var currentTheme = document.body.classList.contains('light-mode') ? 'light' : 'dark';
-			chrome.storage.sync.set({ theme: currentTheme });
-		});
-	}
-}
+  window.onload = function() {
+    initTheme();
+    setupTabs();
+    setupFilters();
+    setupPoc();
+    setupActions();
+    connectToBackground();
+  };
 
-function setupTabs() {
-	var navListeners = document.getElementById('nav-listeners');
-	var navPoc = document.getElementById('nav-poc');
-	var viewListeners = document.getElementById('view-listeners');
-	var viewPoc = document.getElementById('view-poc');
+  // ── Theme ─────────────────────────────────────────────────────────
 
-	navListeners.addEventListener('click', function() {
-		navListeners.classList.add('active');
-		navPoc.classList.remove('active');
-		viewListeners.classList.add('active');
-		viewPoc.classList.remove('active');
-	});
+  function initTheme() {
+    chrome.storage.sync.get({theme: 'dark'}, function(items) {
+      if (items.theme === 'light') document.body.classList.add('light-mode');
+    });
+    document.getElementById('btn-theme').addEventListener('click', function() {
+      document.body.classList.toggle('light-mode');
+      chrome.storage.sync.set({
+        theme: document.body.classList.contains('light-mode') ? 'light' : 'dark'
+      });
+    });
+  }
 
-	navPoc.addEventListener('click', function() {
-		navPoc.classList.add('active');
-		navListeners.classList.remove('active');
-		viewPoc.classList.add('active');
-		viewListeners.classList.remove('active');
-	});
-}
+  // ── Tab navigation ────────────────────────────────────────────────
 
-function setupSearchAndFilters() {
-	var searchInput = document.getElementById('search-input');
-	searchInput.addEventListener('input', function(e) {
-		currentSearchQuery = e.target.value.toLowerCase();
-		renderListenersList(globalListenersData);
-	});
+  function setupTabs() {
+    var btns = document.querySelectorAll('.tab-btn');
+    btns.forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        btns.forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        activeTab = btn.getAttribute('data-tab');
+        document.querySelectorAll('.tab-view').forEach(function(v) { v.classList.remove('active'); });
+        document.getElementById('tab-' + activeTab).classList.add('active');
+      });
+    });
+  }
 
-	var pills = document.querySelectorAll('.pill');
-	pills.forEach(function(pill) {
-		pill.addEventListener('click', function() {
-			pills.forEach(p => p.classList.remove('active'));
-			pill.classList.add('active');
-			currentFilterType = pill.getAttribute('data-filter');
-			renderListenersList(globalListenersData);
-		});
-	});
-}
+  // ── Filters ───────────────────────────────────────────────────────
 
-function setupPocSender() {
-	var sendBtn = document.getElementById('btn-send-poc');
-	var statusDiv = document.getElementById('poc-status');
+  function setupFilters() {
+    document.getElementById('search-input').addEventListener('input', function(e) {
+      searchQuery = e.target.value.toLowerCase();
+      renderListeners();
+    });
 
-	sendBtn.addEventListener('click', function() {
-		var origin = document.getElementById('poc-origin').value || '*';
-		var payload = document.getElementById('poc-payload').value;
+    document.querySelectorAll('.pill').forEach(function(pill) {
+      pill.addEventListener('click', function() {
+        document.querySelectorAll('.pill').forEach(function(p) { p.classList.remove('active'); });
+        pill.classList.add('active');
+        confidenceFilter = pill.getAttribute('data-filter');
+        renderListeners();
+      });
+    });
 
-		if (!payload) {
-			statusDiv.style.color = '#f38ba8';
-			statusDiv.innerText = 'Error: Payload cannot be empty.';
-			return;
-		}
+    document.getElementById('msg-search-input').addEventListener('input', function(e) {
+      renderMessages(e.target.value.toLowerCase());
+    });
 
-		chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
-			if (tabs && tabs[0]) {
-				chrome.tabs.sendMessage(tabs[0].id, {
-					action: "FIRE_POST_MESSAGE",
-					payload: payload,
-					targetOrigin: origin
-				}, function(response) {
-					if (chrome.runtime.lastError) {
-						statusDiv.style.color = '#f38ba8';
-						statusDiv.innerText = 'Failed to send message into page.';
-					} else if (response && response.status === 'success') {
-						statusDiv.style.color = '#a6e3a1';
-						statusDiv.innerText = '✓ postMessage payload sent successfully!';
-					} else {
-						statusDiv.style.color = '#f38ba8';
-						statusDiv.innerText = 'Error: ' + (response ? response.message : 'Unknown');
-					}
-				});
-			}
-		});
-	});
-}
+    document.getElementById('sender-search-input').addEventListener('input', function(e) {
+      renderSenders(e.target.value.toLowerCase());
+    });
+  }
 
-function loaded() {
-	initTheme();
-	setupThemeToggle();
-	setupTabs();
-	setupSearchAndFilters();
-	setupPocSender();
+  // ── Background connection ─────────────────────────────────────────
 
-	port.postMessage("get-stuff");
-	port.onMessage.addListener(function(msg) {
-		chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-			if(tabs && tabs[0]) {
-				var selectedId = tabs[0].id;
-				globalListenersData = (msg.listeners && msg.listeners[selectedId]) ? msg.listeners[selectedId] : [];
-				renderListenersList(globalListenersData);
-			}
-		});
-	});
-}
+  function connectToBackground() {
+    port = chrome.runtime.connect({name: 'popup'});
 
-window.onload = loaded;
+    port.onMessage.addListener(function(msg) {
+      if (msg.tabData) {
+        chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+          if (tabs && tabs[0]) {
+            currentTabId = tabs[0].id;
+            currentTabUrl = tabs[0].url || '';
 
-const RISKY_PATTERNS = [
-	{ name: 'Missing Origin Check', regex: /origin/i, invert: true, type: 'danger' },
-	{ name: 'Flawed .indexOf() Check', regex: /\.origin\.indexOf\(/i, type: 'warning' },
-	{ name: 'Flawed .includes() Check', regex: /\.origin\.includes\(/i, type: 'warning' },
-	{ name: 'Regex Origin Match', regex: /\.origin\.match\(|\.origin\.search\(/i, type: 'warning' },
-	{ name: 'XSS Sink (eval)', regex: /\beval\s*\(/g, type: 'danger' },
-	{ name: 'XSS Sink (innerHTML)', regex: /\.innerHTML\s*=/g, type: 'danger' },
-	{ name: 'XSS Sink (outerHTML)', regex: /\.outerHTML\s*=/g, type: 'danger' },
-	{ name: 'XSS Sink (document.write)', regex: /document\.write\s*\(/g, type: 'danger' },
-	{ name: 'DOM Navigation Sink', regex: /(location\.href|location\.assign|location\.replace)\s*=/g, type: 'warning' },
-	{ name: 'Storage Access', regex: /(localStorage|sessionStorage|document\.cookie)/g, type: 'info' }
-];
+            var data = msg.tabData[currentTabId];
+            tabListeners = (data && data.listeners) ? data.listeners : [];
+            tabMessages = (data && data.messages) ? data.messages : [];
+            tabSenders = (data && data.senders) ? data.senders : [];
 
-function analyzeCode(codeString) {
-	let flags = [];
-	if (!/origin/i.test(codeString)) {
-		flags.push({ name: 'NO ORIGIN CHECK', type: 'danger' });
-	}
-	RISKY_PATTERNS.forEach(pattern => {
-		if (!pattern.invert && pattern.regex.test(codeString)) {
-			flags.push({ name: pattern.name, type: pattern.type });
-		}
-	});
-	return flags;
-}
+            updateTargetUrl();
+            updateCounts();
+            updateStats();
+            renderListeners();
+            renderMessages('');
+            renderSenders('');
+          }
+        });
+      }
 
-function formatAndHighlightCode(codeString) {
-	let safeCode = codeString.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-	safeCode = safeCode.replace(/(&quot;|["'`])([\s\S]*?)(&quot;|["'`])/g, '<span class="syn-string">$1$2$3</span>');
-	safeCode = safeCode.replace(/(\beval\s*\()|(\.innerHTML\s*=)|(\.outerHTML\s*=)|(document\.write\s*\()/g, '<span class="hl-sink">$&</span>');
-	safeCode = safeCode.replace(/(\.origin\.indexOf\()|(\.origin\.includes\()|(location\.href\s*=)/g, '<span class="hl-weak">$&</span>');
-	safeCode = safeCode.replace(/\b(function|return|var|let|const|if|else|try|catch|typeof)\b/g, '<span class="syn-keyword">$1</span>');
-	return safeCode;
-}
+      if (msg.exportData) {
+        downloadJson(msg.exportData);
+      }
+    });
 
-function generateExploitHarness(targetUrl, domain) {
-	return `<!DOCTYPE html>
-<html>
-<head>
-    <title>postMessage Exploit Harness - ${domain}</title>
-</head>
-<body>
-    <h3>Targeting: ${domain}</h3>
-    <iframe id="targetFrame" src="${targetUrl}" width="800" height="600"></iframe>
+    port.postMessage('get-data');
+  }
 
-    <script>
-        const iframe = document.getElementById('targetFrame');
-        function sendExploitPayload() {
-            const payload = { "type": "EXPLOIT_PAYLOAD", "data": "<img src=x onerror=alert(document.domain)>" };
-            iframe.contentWindow.postMessage(payload, "*");
-        }
-        iframe.onload = () => { setTimeout(sendExploitPayload, 1000); };
-    </script>
-</body>
-</html>`;
-}
+  // ── Header & counts ───────────────────────────────────────────────
 
-function renderListenersList(listeners) {
-	var x = document.getElementById('x');
-	if (x && x.parentElement) {
-		x.parentElement.removeChild(x);
-	}
-	x = document.createElement('ol');
-	x.id = 'x';
-	
-	currentTargetUrl = (listeners && listeners.length) ? listeners[0].parent_url : '';
-	document.getElementById('h').innerText = currentTargetUrl ? 'Target: ' + currentTargetUrl : 'No postMessage listeners detected.';
+  function updateTargetUrl() {
+    var el = document.getElementById('target-url');
+    el.textContent = currentTabUrl ? currentTabUrl : 'No page detected';
+  }
 
-	if(listeners) {
-		for(var i = 0; i < listeners.length; i++) {
-			var listener = listeners[i];
-			var flags = analyzeCode(listener.listener);
-			var domainStr = (listener.domain || '').toLowerCase();
-			var codeStr = (listener.listener || '').toLowerCase();
-			var stackStr = (listener.stack || '').toLowerCase();
+  function updateCounts() {
+    document.getElementById('count-listeners').textContent = tabListeners.length;
+    document.getElementById('count-messages').textContent = tabMessages.length;
+    document.getElementById('count-senders').textContent = tabSenders.length;
+  }
 
-			// Apply Pill Filters
-			if (currentFilterType === 'danger' && !flags.some(f => f.type === 'danger')) continue;
-			if (currentFilterType === 'warning' && !flags.some(f => f.type === 'warning')) continue;
-			if (currentFilterType === 'no-origin' && !flags.some(f => f.name === 'NO ORIGIN CHECK')) continue;
+  function updateStats() {
+    var bar = document.getElementById('stats-bar');
+    if (tabListeners.length === 0) {
+      bar.style.display = 'none';
+      return;
+    }
 
-			// Apply Search Query Filter
-			if (currentSearchQuery) {
-				var matchesDomain = domainStr.includes(currentSearchQuery);
-				var matchesCode = codeStr.includes(currentSearchQuery);
-				var matchesStack = stackStr.includes(currentSearchQuery);
-				if (!matchesDomain && !matchesCode && !matchesStack) {
-					continue;
-				}
-			}
+    var counts = {critical: 0, high: 0, medium: 0, low: 0, info: 0};
+    tabListeners.forEach(function(l) {
+      var analysis = Analyzer.classifyListener(l.listenerSource || '');
+      counts[analysis.confidence]++;
+    });
 
-			var el = document.createElement('li');
+    bar.style.display = 'flex';
+    bar.innerHTML = '';
 
-			var headerLine = document.createElement('div');
-			headerLine.className = 'header-line';
-			
-			var bel = document.createElement('span');
-			bel.className = 'domain';
-			bel.innerText = listener.domain || 'unknown-domain';
-			
-			var win = document.createElement('span');
-			win.className = 'win-info';
-			win.innerText = (listener.window ? listener.window + ' ' : '') + (listener.hops && listener.hops.length ? listener.hops : '');
-			
-			headerLine.appendChild(bel);
-			headerLine.appendChild(win);
-			el.appendChild(headerLine);
+    if (counts.critical > 0) addStat(bar, 'red', counts.critical + ' critical pattern' + (counts.critical > 1 ? 's' : ''));
+    if (counts.high > 0) addStat(bar, 'peach', counts.high + ' high pattern' + (counts.high > 1 ? 's' : ''));
+    if (counts.medium > 0) addStat(bar, 'yellow', counts.medium + ' medium pattern' + (counts.medium > 1 ? 's' : ''));
+    addStat(bar, 'blue', tabListeners.length + ' total listeners');
+    var note = document.createElement('div');
+    note.className = 'stat-item';
+    note.style.cssText = 'font-style:italic;color:var(--muted);';
+    note.textContent = 'Pattern analysis — manual validation required';
+    bar.appendChild(note);
+    if (tabSenders.length > 0) {
+      var wildcards = tabSenders.filter(function(s) { return s.wildcardOrigin; }).length;
+      if (wildcards > 0) addStat(bar, 'peach', wildcards + ' wildcard senders');
+    }
+  }
 
-			if (flags.length > 0) {
-				var badgeContainer = document.createElement('div');
-				badgeContainer.className = 'badges';
-				flags.forEach(flag => {
-					var badge = document.createElement('span');
-					badge.className = `badge badge-${flag.type}`;
-					badge.innerText = flag.name;
-					badgeContainer.appendChild(badge);
-				});
-				el.appendChild(badgeContainer);
-			}
+  function addStat(parent, colorClass, text) {
+    var item = document.createElement('div');
+    item.className = 'stat-item';
+    item.innerHTML = '<span class="stat-dot ' + colorClass + '"></span>' + escapeHtml(text);
+    parent.appendChild(item);
+  }
 
-			var sel = document.createElement('div');
-			sel.className = 'stack-info';
-			if(listener.fullstack) sel.setAttribute('title', listener.fullstack.join("\n\n"));
-			sel.innerText = 'Caller: ' + (listener.stack || 'Direct Listener');
-			el.appendChild(sel);
+  // ── Render: Listeners ─────────────────────────────────────────────
 
-			var pel = document.createElement('pre');
-			pel.innerHTML = formatAndHighlightCode(listener.listener);
-			el.appendChild(pel);
+  function renderListeners() {
+    var container = document.getElementById('listeners-list');
+    container.innerHTML = '';
 
-			var actionRow = document.createElement('div');
-			actionRow.className = 'action-row';
+    if (tabListeners.length === 0) {
+      container.innerHTML = '<div class="empty-state"><div class="icon">📡</div>No postMessage listeners detected on this page.</div>';
+      return;
+    }
 
-			var copyBtn = document.createElement('button');
-			copyBtn.className = 'btn-copy';
-			copyBtn.innerText = '📋 Copy Exploit Harness';
-			
-			(function(targetUrl, domainName, buttonEl) {
-				buttonEl.addEventListener('click', function() {
-					var harnessHtml = generateExploitHarness(targetUrl, domainName);
-					navigator.clipboard.writeText(harnessHtml).then(function() {
-						var origText = buttonEl.innerText;
-						buttonEl.innerText = '✓ Copied HTML!';
-						setTimeout(function() { buttonEl.innerText = origText; }, 1500);
-					});
-				});
-			})(listener.parent_url || currentTargetUrl, listener.domain || 'Target', copyBtn);
+    // Analyze and sort by confidence (critical first)
+    var analyzed = tabListeners.map(function(listener) {
+      return {
+        listener: listener,
+        analysis: Analyzer.classifyListener(listener.listenerSource || '')
+      };
+    });
 
-			actionRow.appendChild(copyBtn);
-			el.appendChild(actionRow);
+    var order = {critical: 0, high: 1, medium: 2, low: 3, info: 4};
+    analyzed.sort(function(a, b) {
+      return (order[a.analysis.confidence] || 4) - (order[b.analysis.confidence] || 4);
+    });
 
-			x.appendChild(el);
-		}
-	}
-	document.getElementById('view-listeners').appendChild(x);
-}
+    var rendered = 0;
+    analyzed.forEach(function(item) {
+      var listener = item.listener;
+      var analysis = item.analysis;
+
+      // Confidence filter
+      if (confidenceFilter !== 'all' && analysis.confidence !== confidenceFilter) return;
+
+      // Search filter
+      if (searchQuery) {
+        var haystack = [
+          listener.pageOrigin || listener.domain || '',
+          listener.listenerSource || '',
+          (listener.stack || []).join(' '),
+          listener.frame || ''
+        ].join(' ').toLowerCase();
+        if (haystack.indexOf(searchQuery) === -1) return;
+      }
+
+      container.appendChild(buildListenerCard(listener, analysis));
+      rendered++;
+    });
+
+    if (rendered === 0) {
+      container.innerHTML = '<div class="empty-state">No listeners match current filters.</div>';
+    }
+  }
+
+  function buildListenerCard(listener, analysis) {
+    var card = document.createElement('div');
+    card.className = 'card';
+    if (listener.removed) card.style.opacity = '0.55';
+
+    // Header: domain + frame
+    var header = document.createElement('div');
+    header.className = 'card-header';
+
+    var domain = document.createElement('span');
+    domain.className = 'card-domain';
+    domain.textContent = listener.pageOrigin || listener.domain || 'unknown';
+
+    var right = document.createElement('span');
+    right.className = 'card-frame';
+    right.textContent = listener.frame || '';
+
+    header.appendChild(domain);
+    header.appendChild(right);
+    card.appendChild(header);
+
+    // Confidence badge + wrappers
+    var badgeRow = document.createElement('div');
+    badgeRow.style.cssText = 'display:flex;align-items:center;gap:4px;margin:4px 0;flex-wrap:wrap;';
+
+    var confBadge = document.createElement('span');
+    confBadge.className = 'confidence confidence-' + analysis.confidence;
+    confBadge.textContent = analysis.confidence;
+    confBadge.title = 'Pattern confidence: ' + analysis.confidence + '. Not a confirmed vulnerability — manual validation required.';
+    badgeRow.appendChild(confBadge);
+
+    if (listener.removed) {
+      var removedTag = document.createElement('span');
+      removedTag.className = 'wrapper-tag';
+      removedTag.style.cssText = 'color:var(--red);border-color:var(--red);background:rgba(243,139,168,0.1);';
+      removedTag.textContent = 'removed';
+      badgeRow.appendChild(removedTag);
+    }
+
+    if (listener.once) {
+      var onceTag = document.createElement('span');
+      onceTag.className = 'wrapper-tag';
+      onceTag.textContent = 'once';
+      onceTag.title = 'Registered with {once: true} — auto-removed after first dispatch';
+      badgeRow.appendChild(onceTag);
+    }
+
+    if (listener.registrationMethod && listener.registrationMethod !== 'addEventListener') {
+      var methodTag = document.createElement('span');
+      methodTag.className = 'wrapper-tag';
+      methodTag.textContent = listener.registrationMethod;
+      badgeRow.appendChild(methodTag);
+    }
+
+    if (listener.wrappers && listener.wrappers.length > 0) {
+      listener.wrappers.forEach(function(w) {
+        var tag = document.createElement('span');
+        tag.className = 'wrapper-tag';
+        tag.textContent = w;
+        badgeRow.appendChild(tag);
+      });
+    }
+
+    card.appendChild(badgeRow);
+
+    // Findings
+    if (analysis.findings.length > 0) {
+      var findingsRow = document.createElement('div');
+      findingsRow.className = 'findings-row';
+
+      analysis.findings.forEach(function(f) {
+        var badge = document.createElement('span');
+        badge.className = 'finding-badge finding-' + f.severity;
+        badge.textContent = f.label;
+        badge.title = f.detail;
+        findingsRow.appendChild(badge);
+      });
+
+      card.appendChild(findingsRow);
+    }
+
+    // Stack
+    if (listener.stack && listener.stack.length > 0) {
+      var stackRow = document.createElement('div');
+      stackRow.className = 'stack-row';
+      stackRow.textContent = listener.stack[0];
+      if (listener.fullStack) {
+        stackRow.title = listener.fullStack.join('\n');
+      }
+      card.appendChild(stackRow);
+    }
+
+    // Code block (collapsible)
+    var code = listener.listenerSource || '';
+    var codeBlock = document.createElement('div');
+    codeBlock.className = 'code-block' + (code.length > 300 ? ' collapsed' : '');
+
+    var pre = document.createElement('pre');
+    pre.innerHTML = highlightCode(code);
+    codeBlock.appendChild(pre);
+
+    if (code.length > 300) {
+      var toggle = document.createElement('button');
+      toggle.className = 'code-toggle';
+      toggle.textContent = 'Show more';
+      toggle.addEventListener('click', function() {
+        var isCollapsed = codeBlock.classList.toggle('collapsed');
+        toggle.textContent = isCollapsed ? 'Show more' : 'Show less';
+      });
+      codeBlock.appendChild(toggle);
+    }
+
+    card.appendChild(codeBlock);
+
+    // Actions
+    var actionRow = document.createElement('div');
+    actionRow.className = 'action-row';
+
+    var copyCodeBtn = createActionBtn('Copy Code', function() {
+      copyToClipboard(code, copyCodeBtn);
+    });
+    actionRow.appendChild(copyCodeBtn);
+
+    var copyHarnessBtn = createActionBtn('Copy Harness', function() {
+      var harness = generateHarness(currentTabUrl, listener.domain || 'target');
+      copyToClipboard(harness, copyHarnessBtn);
+    });
+    actionRow.appendChild(copyHarnessBtn);
+
+    if (listener.fullStack && listener.fullStack.length > 0) {
+      var copyStackBtn = createActionBtn('Copy Stack', function() {
+        copyToClipboard(listener.fullStack.join('\n'), copyStackBtn);
+      });
+      actionRow.appendChild(copyStackBtn);
+    }
+
+    card.appendChild(actionRow);
+
+    return card;
+  }
+
+  // ── Render: Messages ──────────────────────────────────────────────
+
+  function renderMessages(query) {
+    var container = document.getElementById('messages-list');
+    container.innerHTML = '';
+
+    var msgs = tabMessages.filter(function(m) { return m.type === 'message'; });
+
+    if (msgs.length === 0) {
+      container.innerHTML = '<div class="empty-state"><div class="icon">📨</div>No messages captured yet. Interact with the page to trigger postMessage communication.</div>';
+      return;
+    }
+
+    // Show newest first
+    msgs = msgs.slice().reverse();
+
+    var rendered = 0;
+    msgs.forEach(function(msg) {
+      if (query) {
+        var haystack = [msg.origin || '', msg.data || '', msg.sourceFrame || '', msg.receiverFrame || ''].join(' ').toLowerCase();
+        if (haystack.indexOf(query) === -1) return;
+      }
+
+      var card = document.createElement('div');
+      card.className = 'msg-card';
+      if (msg.pocGenerated) card.style.borderColor = 'var(--teal)';
+
+      // Flow: source -> receiver
+      var flow = document.createElement('div');
+      flow.className = 'msg-flow';
+      flow.innerHTML =
+        (msg.pocGenerated ? '<span class="wrapper-tag" style="color:var(--teal);border-color:var(--teal);">PoC</span>' : '') +
+        '<span class="msg-source">' + escapeHtml(msg.sourceFrame || 'unknown') + '</span>' +
+        '<span class="msg-arrow">→</span>' +
+        '<span class="msg-receiver">' + escapeHtml(msg.receiverFrame || 'this') + '</span>' +
+        '<span class="msg-origin">origin: ' + escapeHtml(msg.origin || 'null') + '</span>';
+      card.appendChild(flow);
+
+      // Timestamp + ports
+      var meta = document.createElement('div');
+      meta.className = 'card-time';
+      var time = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : '';
+      meta.textContent = time + (msg.hasPorts ? ' | ' + msg.portCount + ' port(s)' : '');
+      card.appendChild(meta);
+
+      // Data preview
+      if (msg.data) {
+        var dataDiv = document.createElement('div');
+        dataDiv.className = 'msg-data';
+        dataDiv.textContent = msg.data;
+        card.appendChild(dataDiv);
+      }
+
+      container.appendChild(card);
+      rendered++;
+    });
+
+    if (rendered === 0) {
+      container.innerHTML = '<div class="empty-state">No messages match search.</div>';
+    }
+  }
+
+  // ── Render: Senders ───────────────────────────────────────────────
+
+  function renderSenders(query) {
+    var container = document.getElementById('senders-list');
+    container.innerHTML = '';
+
+    if (tabSenders.length === 0) {
+      container.innerHTML = '<div class="empty-state"><div class="icon">📤</div>No postMessage senders detected. Interact with the page to trigger sends.</div>';
+      return;
+    }
+
+    // Show newest first
+    var senders = tabSenders.slice().reverse();
+
+    var rendered = 0;
+    senders.forEach(function(sender) {
+      if (query) {
+        var haystack = [sender.targetOrigin || '', sender.data || '', sender.domain || ''].join(' ').toLowerCase();
+        if (haystack.indexOf(query) === -1) return;
+      }
+
+      var analysis = Analyzer.analyzeSender(sender);
+
+      var card = document.createElement('div');
+      card.className = 'msg-card';
+
+      // Target origin
+      var targetRow = document.createElement('div');
+      targetRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:4px;';
+
+      var targetLabel = document.createElement('span');
+      targetLabel.style.cssText = 'font-size:10px;color:var(--muted);';
+      targetLabel.textContent = 'targetOrigin:';
+
+      var targetVal = document.createElement('span');
+      targetVal.className = 'sender-target ' + (sender.wildcardOrigin ? 'wildcard' : 'specific');
+      targetVal.textContent = sender.targetOrigin || '*';
+
+      targetRow.appendChild(targetLabel);
+      targetRow.appendChild(targetVal);
+
+      if (analysis.findings.length > 0) {
+        analysis.findings.forEach(function(f) {
+          var badge = document.createElement('span');
+          badge.className = 'finding-badge finding-' + f.severity;
+          badge.textContent = f.label;
+          badge.title = f.detail;
+          targetRow.appendChild(badge);
+        });
+      }
+
+      card.appendChild(targetRow);
+
+      // Frame + time
+      var meta = document.createElement('div');
+      meta.className = 'card-time';
+      var time = sender.timestamp ? new Date(sender.timestamp).toLocaleTimeString() : '';
+      meta.textContent = (sender.frame || '') + ' | ' + time;
+      card.appendChild(meta);
+
+      // Stack
+      if (sender.stack && sender.stack.length > 0) {
+        var stackRow = document.createElement('div');
+        stackRow.className = 'stack-row';
+        stackRow.textContent = sender.stack[0];
+        card.appendChild(stackRow);
+      }
+
+      // Data preview
+      if (sender.data) {
+        var dataDiv = document.createElement('div');
+        dataDiv.className = 'msg-data';
+        dataDiv.textContent = sender.data;
+        card.appendChild(dataDiv);
+      }
+
+      container.appendChild(card);
+      rendered++;
+    });
+
+    if (rendered === 0) {
+      container.innerHTML = '<div class="empty-state">No senders match search.</div>';
+    }
+  }
+
+  // ── PoC Sender ────────────────────────────────────────────────────
+
+  function setupPoc() {
+    document.getElementById('btn-send-poc').addEventListener('click', function() {
+      var origin = document.getElementById('poc-origin').value || '*';
+      var payload = document.getElementById('poc-payload').value;
+      var statusDiv = document.getElementById('poc-status');
+
+      if (!payload) {
+        statusDiv.style.color = 'var(--red)';
+        statusDiv.textContent = 'Payload cannot be empty.';
+        return;
+      }
+
+      chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+        if (!tabs || !tabs[0]) return;
+        chrome.tabs.sendMessage(tabs[0].id, {
+          action: 'FIRE_POST_MESSAGE',
+          payload: payload,
+          targetOrigin: origin
+        }, function(response) {
+          if (chrome.runtime.lastError) {
+            statusDiv.style.color = 'var(--red)';
+            statusDiv.textContent = 'Failed: ' + chrome.runtime.lastError.message;
+          } else if (response && response.status === 'success') {
+            statusDiv.style.color = 'var(--green)';
+            statusDiv.textContent = 'Payload sent.';
+          } else {
+            statusDiv.style.color = 'var(--red)';
+            statusDiv.textContent = 'Error: ' + (response ? response.message : 'Unknown');
+          }
+        });
+      });
+    });
+
+    document.getElementById('btn-harness').addEventListener('click', function() {
+      var btn = this;
+      var hostname = 'target';
+      try { hostname = new URL(currentTabUrl).hostname || 'target'; } catch (e) {}
+      var harness = generateHarness(currentTabUrl, hostname);
+      copyToClipboard(harness, btn);
+    });
+  }
+
+  // ── Actions (export, clear) ───────────────────────────────────────
+
+  function setupActions() {
+    document.getElementById('btn-export').addEventListener('click', function() {
+      if (port) port.postMessage({action: 'export-tab', tabId: currentTabId});
+    });
+
+    document.getElementById('btn-clear').addEventListener('click', function() {
+      if (port) {
+        port.postMessage({action: 'clear-tab', tabId: currentTabId});
+        tabListeners = [];
+        tabMessages = [];
+        tabSenders = [];
+        updateCounts();
+        updateStats();
+        renderListeners();
+        renderMessages('');
+        renderSenders('');
+      }
+    });
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function highlightCode(code) {
+    var safe = escapeHtml(code);
+    // Keywords
+    safe = safe.replace(/\b(function|return|var|let|const|if|else|try|catch|typeof|new|this|throw|switch|case|break|default|for|while|do|in|of|class|extends|import|export|async|await|yield)\b/g,
+      '<span class="syn-keyword">$1</span>');
+    // Strings (simple)
+    safe = safe.replace(/(["'`])(?:(?!\1|\\).|\\.)*?\1/g, '<span class="syn-string">$&</span>');
+    // Dangerous sinks
+    safe = safe.replace(/(\beval\s*\()|(\.innerHTML\s*=)|(\.outerHTML\s*=)|(document\.write(?:ln)?\s*\()|(\.insertAdjacentHTML\s*\()/g,
+      '<span class="hl-sink">$&</span>');
+    // Weak patterns
+    safe = safe.replace(/(\.origin\.indexOf\s*\()|(\.origin\.includes\s*\()|(\.origin\.endsWith\s*\()/g,
+      '<span class="hl-weak">$&</span>');
+    return safe;
+  }
+
+  function createActionBtn(text, onclick) {
+    var btn = document.createElement('button');
+    btn.className = 'action-btn';
+    btn.textContent = text;
+    btn.addEventListener('click', onclick);
+    return btn;
+  }
+
+  function copyToClipboard(text, btn) {
+    navigator.clipboard.writeText(text).then(function() {
+      var orig = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(function() { btn.textContent = orig; }, 1200);
+    });
+  }
+
+  function downloadJson(data) {
+    var blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'postmessage-tracker-' + new Date().toISOString().slice(0, 10) + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function generateHarness(targetUrl, domain) {
+    return '<!DOCTYPE html>\n' +
+      '<html>\n<head>\n  <title>postMessage PoC - ' + escapeHtml(domain) + '</title>\n</head>\n<body>\n' +
+      '  <h3>Target: ' + escapeHtml(domain) + '</h3>\n' +
+      '  <iframe id="target" src="' + escapeHtml(targetUrl) + '" style="width:90%;height:500px;border:1px solid #ccc;"></iframe>\n\n' +
+      '  <script>\n' +
+      '    var iframe = document.getElementById("target");\n' +
+      '    function send(data, origin) {\n' +
+      '      iframe.contentWindow.postMessage(data, origin || "*");\n' +
+      '    }\n\n' +
+      '    // Modify payload and origin as needed:\n' +
+      '    iframe.onload = function() {\n' +
+      '      setTimeout(function() {\n' +
+      '        send({"type": "test", "data": "<img src=x onerror=alert(document.domain)>"});\n' +
+      '      }, 1000);\n' +
+      '    };\n\n' +
+      '    // Listen for responses:\n' +
+      '    window.addEventListener("message", function(e) {\n' +
+      '      console.log("Response from target:", e.origin, e.data);\n' +
+      '    });\n' +
+      '  </' + 'script>\n' +
+      '</body>\n</html>';
+  }
+
+})();

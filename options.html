@@ -1,14 +1,58 @@
 <!DOCTYPE html>
 <html>
-<head></head>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      padding: 20px;
+      max-width: 500px;
+    }
+    h2 { color: #89b4fa; margin-bottom: 16px; font-size: 16px; }
+    label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #a6adc8; }
+    input[type="text"] {
+      width: 100%;
+      background: #11111b;
+      border: 1px solid #313244;
+      color: #cdd6f4;
+      padding: 8px 10px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: 'Consolas', monospace;
+      margin-bottom: 12px;
+    }
+    input:focus { outline: none; border-color: #89b4fa; }
+    button {
+      background: #89b4fa;
+      color: #11111b;
+      border: none;
+      padding: 8px 20px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    button:hover { opacity: 0.9; }
+    #status { margin-top: 8px; font-size: 12px; color: #a6e3a1; }
+    .help { font-size: 11px; color: #6c7086; margin-top: 4px; }
+  </style>
+</head>
 <body>
-	<div id='response'></div>
-	<div id="options">
-		Log-URL:
-		<input type="text" id="log-url" size="40" />
-		<button id="save">Save</button>
-		<div id="status"></div>
-	</div>
-	<script src="options.js"></script>
+  <h2>postMessage Tracker Settings</h2>
+
+  <label for="log-url">Log Webhook URL (optional)</label>
+  <input type="text" id="log-url" placeholder="https://your-server.com/log" />
+  <div class="help">
+    When set, every detected listener is POSTed as JSON to this URL.
+    Leave empty to disable.
+  </div>
+
+  <br>
+  <button id="save">Save</button>
+  <div id="status"></div>
+
+  <script src="options.js"></script>
 </body>
 </html>

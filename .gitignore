@@ -1,0 +1,15 @@
+node_modules/
+*.log
+*.tmp
+*.swp
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+.env
+.env.local
+dist/
+build/
+*.crx
+*.pem
+*.zip

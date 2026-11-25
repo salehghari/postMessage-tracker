@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>PM-Tracker Test: Main Page (Port 9100)</title>
+  <style>
+    body { font-family: monospace; background: #1e1e2e; color: #cdd6f4; padding: 20px; }
+    h1 { color: #89b4fa; font-size: 18px; }
+    h2 { color: #a6e3a1; font-size: 14px; margin-top: 20px; }
+    button { background: #313244; color: #cdd6f4; border: 1px solid #45475a; padding: 6px 12px; cursor: pointer; margin: 2px; border-radius: 4px; }
+    button:hover { background: #45475a; }
+    .log { background: #11111b; padding: 10px; margin-top: 10px; max-height: 300px; overflow-y: auto; font-size: 12px; border-radius: 4px; white-space: pre-wrap; }
+    iframe { width: 100%; height: 200px; border: 1px solid #45475a; margin-top: 10px; border-radius: 4px; }
+    .section { border: 1px solid #313244; padding: 12px; margin: 10px 0; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <h1>postMessage Tracker — Browser Test Page</h1>
+  <p>Port 9100 (main). Cross-origin iframe on port 9101.</p>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <h2>1. Listener Lifecycle</h2>
+
+    <button id="btn-add-listener">Add Listener</button>
+    <button id="btn-remove-listener">Remove Listener</button>
+    <button id="btn-add-once">Add {once: true} Listener</button>
+    <button id="btn-add-duplicate">Add Same Listener Again</button>
+    <button id="btn-add-capture">Add Capture-phase Listener</button>
+    <button id="btn-abort-listener">Add AbortSignal Listener</button>
+    <button id="btn-abort-fire">Abort Signal</button>
+
+    <div id="log-lifecycle" class="log"></div>
+  </div>
+
+  <script>
+    var lifecycleLog = document.getElementById('log-lifecycle');
+    function logLC(msg) { lifecycleLog.textContent += msg + '\n'; }
+
+    // Named function for add/remove
+    function myMessageHandler(event) {
+      logLC('[myMessageHandler] origin=' + event.origin + ' data=' + JSON.stringify(event.data));
+    }
+
+    document.getElementById('btn-add-listener').addEventListener('click', function() {
+      window.addEventListener('message', myMessageHandler);
+      logLC('Added myMessageHandler');
+    });
+
+    document.getElementById('btn-remove-listener').addEventListener('click', function() {
+      window.removeEventListener('message', myMessageHandler);
+      logLC('Removed myMessageHandler');
+    });
+
+    document.getElementById('btn-add-once').addEventListener('click', function() {
+      window.addEventListener('message', function onceHandler(event) {
+        logLC('[onceHandler] fired once: ' + JSON.stringify(event.data));
+      }, {once: true});
+      logLC('Added {once: true} listener');
+    });
+
+    document.getElementById('btn-add-duplicate').addEventListener('click', function() {
+      window.addEventListener('message', myMessageHandler);
+      logLC('Added myMessageHandler again (duplicate)');
+    });
+
+    document.getElementById('btn-add-capture').addEventListener('click', function() {
+      window.addEventListener('message', function captureHandler(event) {
+        logLC('[captureHandler] capture phase: ' + JSON.stringify(event.data));
+      }, true);
+      logLC('Added capture-phase listener');
+    });
+
+    var abortController = null;
+    document.getElementById('btn-abort-listener').addEventListener('click', function() {
+      abortController = new AbortController();
+      window.addEventListener('message', function abortableHandler(event) {
+        logLC('[abortableHandler] ' + JSON.stringify(event.data));
+      }, {signal: abortController.signal});
+      logLC('Added AbortSignal listener');
+    });
+
+    document.getElementById('btn-abort-fire').addEventListener('click', function() {
+      if (abortController) {
+        abortController.abort();
+        logLC('Aborted signal');
+      } else {
+        logLC('No controller — add listener first');
+      }
+    });
+  </script>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <h2>2. postMessage Communication</h2>
+
+    <button id="btn-self-msg">Self postMessage</button>
+    <button id="btn-wildcard-msg">Self postMessage (wildcard)</button>
+    <button id="btn-options-msg">Self postMessage (options object)</button>
+    <button id="btn-iframe-msg">Send to Same-Origin Iframe</button>
+    <button id="btn-xorigin-msg">Send to Cross-Origin Iframe</button>
+    <button id="btn-port-msg">MessagePort Test</button>
+    <button id="btn-multi-msg">Send 5 Messages</button>
+
+    <iframe id="same-origin-frame" src="test-page-iframe.html"></iframe>
+    <iframe id="cross-origin-frame" src="http://localhost:9101/test-page-iframe.html"></iframe>
+
+    <div id="log-messaging" class="log"></div>
+  </div>
+
+  <script>
+    var msgLog = document.getElementById('log-messaging');
+    function logMsg(msg) { msgLog.textContent += msg + '\n'; }
+
+    // Listen for responses
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'iframe-response') {
+        logMsg('[response] from ' + e.origin + ': ' + JSON.stringify(e.data));
+      }
+    });
+
+    document.getElementById('btn-self-msg').addEventListener('click', function() {
+      window.postMessage({type: 'self-test', value: 'hello'}, location.origin);
+      logMsg('Sent self postMessage with specific origin');
+    });
+
+    document.getElementById('btn-wildcard-msg').addEventListener('click', function() {
+      window.postMessage({type: 'wildcard-test'}, '*');
+      logMsg('Sent self postMessage with wildcard origin');
+    });
+
+    document.getElementById('btn-options-msg').addEventListener('click', function() {
+      window.postMessage({type: 'options-test'}, {targetOrigin: location.origin});
+      logMsg('Sent self postMessage with options object');
+    });
+
+    document.getElementById('btn-iframe-msg').addEventListener('click', function() {
+      var frame = document.getElementById('same-origin-frame');
+      frame.contentWindow.postMessage({type: 'parent-to-iframe', text: 'same-origin msg'}, '*');
+      logMsg('Sent to same-origin iframe');
+    });
+
+    document.getElementById('btn-xorigin-msg').addEventListener('click', function() {
+      var frame = document.getElementById('cross-origin-frame');
+      frame.contentWindow.postMessage({type: 'parent-to-iframe', text: 'cross-origin msg'}, '*');
+      logMsg('Sent to cross-origin iframe');
+    });
+
+    document.getElementById('btn-port-msg').addEventListener('click', function() {
+      var channel = new MessageChannel();
+      channel.port1.addEventListener('message', function(e) {
+        logMsg('[port1] received: ' + JSON.stringify(e.data));
+      });
+      channel.port1.start();
+      channel.port2.postMessage({type: 'port-test', value: 42});
+      logMsg('Sent MessagePort message');
+    });
+
+    document.getElementById('btn-multi-msg').addEventListener('click', function() {
+      for (var i = 0; i < 5; i++) {
+        window.postMessage({type: 'burst', index: i}, '*');
+      }
+      logMsg('Sent 5 burst messages');
+    });
+  </script>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <h2>3. Origin Validation Patterns</h2>
+    <p>These listeners are registered at page load with different origin check patterns.</p>
+    <div id="log-origin" class="log"></div>
+  </div>
+
+  <script>
+    var originLog = document.getElementById('log-origin');
+    function logOV(msg) { originLog.textContent += msg + '\n'; }
+
+    // 3a. Strict equality (strong)
+    window.addEventListener('message', function(event) {
+      if (event.origin === "https://trusted.example.com") {
+        logOV('[strict] Accepted from trusted origin');
+      }
+    });
+
+    // 3b. startsWith (moderate)
+    window.addEventListener('message', function(e) {
+      if (e.origin.startsWith("https://app.")) {
+        logOV('[startsWith] Accepted from app subdomain');
+      }
+    });
+
+    // 3c. includes (weak)
+    window.addEventListener('message', function(e) {
+      if (e.origin.includes("example")) {
+        logOV('[includes] Accepted — includes "example"');
+      }
+    });
+
+    // 3d. indexOf (weak)
+    window.addEventListener('message', function(e) {
+      if (e.origin.indexOf("example.com") !== -1) {
+        logOV('[indexOf] Accepted — indexOf "example.com"');
+      }
+    });
+
+    // 3e. endsWith (weak)
+    window.addEventListener('message', function(evt) {
+      if (evt.origin.endsWith(".example.com")) {
+        logOV('[endsWith] Accepted — endsWith ".example.com"');
+      }
+    });
+
+    // 3f. Regex (variable)
+    window.addEventListener('message', function(e) {
+      if (e.origin.match(/^https:\/\/.*\.example\.com$/)) {
+        logOV('[regex] Accepted — regex match');
+      }
+    });
+
+    // 3g. Custom parameter name (was missed in v2.0.0, should work in v2.0.1)
+    window.addEventListener('message', function(messageEvent) {
+      if (messageEvent.origin === "https://custom-param.example.com") {
+        logOV('[customParam] Accepted from custom-param origin');
+      }
+    });
+
+    // 3h. No origin check at all (dangerous)
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'no-origin-check') {
+        logOV('[NO_ORIGIN] Processed without origin check: ' + JSON.stringify(e.data));
+      }
+    });
+
+    logOV('8 origin-validation listeners registered at page load');
+  </script>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <h2>4. Message-to-Sink Behavior</h2>
+    <button id="btn-trigger-sinks">Send Sink Test Messages</button>
+    <div id="sink-target"></div>
+    <div id="log-sinks" class="log"></div>
+  </div>
+
+  <script>
+    var sinkLog = document.getElementById('log-sinks');
+    function logSink(msg) { sinkLog.textContent += msg + '\n'; }
+
+    // 4a. Direct innerHTML write from event.data (should be detected: high)
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'sink-direct-innerHTML') {
+        document.getElementById('sink-target').innerHTML = e.data.html;
+        logSink('[DIRECT-SINK] innerHTML = event.data.html');
+      }
+    });
+
+    // 4b. Indirect innerHTML via called function (should NOT be detected — no cross-function taint)
+    function renderContent(html) {
+      document.getElementById('sink-target').innerHTML = html;
+    }
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'sink-indirect-innerHTML') {
+        renderContent(e.data.html);
+        logSink('[INDIRECT-SINK] renderContent(event.data.html) — innerHTML in called function');
+      }
+    });
+
+    // 4c. Harmless handler — log only (should be low/medium, no sinks)
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'sink-harmless') {
+        console.log('Harmless handler received:', e.data);
+        logSink('[HARMLESS] console.log only');
+      }
+    });
+
+    // 4d. eval sink (should be detected: critical)
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'sink-eval') {
+        // DO NOT actually eval — just log that this code path exists
+        logSink('[EVAL-SINK] eval(e.data.code) pattern exists in source');
+        // eval(e.data.code); // commented for safety
+      }
+    });
+
+    document.getElementById('btn-trigger-sinks').addEventListener('click', function() {
+      window.postMessage({type: 'sink-direct-innerHTML', html: '<b>safe test content</b>'}, '*');
+      window.postMessage({type: 'sink-indirect-innerHTML', html: '<i>indirect content</i>'}, '*');
+      window.postMessage({type: 'sink-harmless', value: 42}, '*');
+      logSink('Sent 3 sink-test messages');
+    });
+  </script>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <h2>5. SPA / pushState Navigation</h2>
+    <button id="btn-pushstate">pushState /page-two</button>
+    <button id="btn-pushstate-back">pushState back</button>
+    <div id="log-spa" class="log"></div>
+  </div>
+
+  <script>
+    var spaLog = document.getElementById('log-spa');
+    document.getElementById('btn-pushstate').addEventListener('click', function() {
+      history.pushState({page: 2}, '', '/page-two');
+      spaLog.textContent += 'pushState to /page-two\n';
+    });
+    document.getElementById('btn-pushstate-back').addEventListener('click', function() {
+      history.pushState({page: 1}, '', '/test-page-main.html');
+      spaLog.textContent += 'pushState back to /test-page-main.html\n';
+    });
+  </script>
+
+</body>
+</html>
